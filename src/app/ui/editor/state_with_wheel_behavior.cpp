@@ -36,6 +36,8 @@
 #include "app/tools/ink.h"
 #include "app/ui/skin/skin_theme.h"
 
+#include <cmath>
+
 namespace app {
 
 using namespace ui;
@@ -242,9 +244,13 @@ void StateWithWheelBehavior::processWheelAction(Editor* editor,
           dz = -1.0;
         else if (dz > 1.0)
           dz = 1.0;
-      }
 
-      zoom = render::Zoom::fromLinearScale(zoom.linearScale() - int(dz));
+        // Continuous zoom for precise wheels (e.g. trackpads)
+        zoom = render::Zoom::fromContinuousScale(zoom.internalScale() * std::pow(2.0, -dz / 2.0));
+      }
+      else {
+        zoom = render::Zoom::fromLinearScale(zoom.linearScale() - int(dz));
+      }
 
       setZoom(editor, zoom, position);
       break;
@@ -513,8 +519,8 @@ void StateWithWheelBehavior::processWheelAction(Editor* editor,
 bool StateWithWheelBehavior::onTouchMagnify(Editor* editor, ui::TouchMessage* msg)
 {
   render::Zoom zoom = editor->zoom();
-  zoom = render::Zoom::fromScale(zoom.internalScale() +
-                                 zoom.internalScale() * msg->magnification());
+  zoom = render::Zoom::fromContinuousScale(zoom.internalScale() +
+                                           zoom.internalScale() * msg->magnification());
 
   setZoom(editor, zoom, msg->position());
   return true;

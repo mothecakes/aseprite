@@ -13,6 +13,8 @@
 #include "render/zoom.h"
 
 #include <algorithm>
+#include <cmath>
+#include <numeric>
 
 namespace render {
 
@@ -53,32 +55,34 @@ Zoom::Zoom(int num, int den) : m_num(num), m_den(den)
   m_internalScale = scale();
 }
 
+// in() and out() go to the next predefined zoom level, even if the
+// current zoom is between two levels (e.g. after a continuous zoom).
 bool Zoom::in()
 {
-  int i = linearScale();
-  if (i < scales_size - 1) {
-    ++i;
-    m_num = scales[i][0];
-    m_den = scales[i][1];
-    m_internalScale = scale();
-    return true;
+  const double s = scale();
+  for (int i = 0; i < scales_size; ++i) {
+    if (double(scales[i][0]) / double(scales[i][1]) > s) {
+      m_num = scales[i][0];
+      m_den = scales[i][1];
+      m_internalScale = scale();
+      return true;
+    }
   }
-  else
-    return false;
+  return false;
 }
 
 bool Zoom::out()
 {
-  int i = linearScale();
-  if (i > 0) {
-    --i;
-    m_num = scales[i][0];
-    m_den = scales[i][1];
-    m_internalScale = scale();
-    return true;
+  const double s = scale();
+  for (int i = scales_size - 1; i >= 0; --i) {
+    if (double(scales[i][0]) / double(scales[i][1]) < s) {
+      m_num = scales[i][0];
+      m_den = scales[i][1];
+      m_internalScale = scale();
+      return true;
+    }
   }
-  else
-    return false;
+  return false;
 }
 
 int Zoom::linearScale() const
@@ -96,6 +100,32 @@ int Zoom::linearScale() const
 Zoom Zoom::fromScale(double scale)
 {
   Zoom zoom = fromLinearScale(findClosestLinearScale(scale));
+  zoom.m_internalScale = scale;
+  return zoom;
+}
+
+// static
+Zoom Zoom::fromContinuousScale(double scale)
+{
+  const double minScale = double(scales[0][0]) / double(scales[0][1]);
+  const double maxScale = double(scales[scales_size - 1][0]) / double(scales[scales_size - 1][1]);
+  scale = std::clamp(scale, minScale, maxScale);
+
+  // Use a resolution of 1/64 so num/den stay small enough to avoid
+  // int overflows in apply()/remove().
+  const int resolution = 64;
+  int num, den;
+  if (scale >= 1.0) {
+    den = resolution;
+    num = int(std::round(scale * resolution));
+  }
+  else {
+    num = resolution;
+    den = int(std::round(resolution / scale));
+  }
+  const int g = std::gcd(num, den);
+
+  Zoom zoom(num / g, den / g);
   zoom.m_internalScale = scale;
   return zoom;
 }

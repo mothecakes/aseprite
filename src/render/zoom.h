@@ -55,6 +55,10 @@ public:
   bool isSimpleZoomLevel() const { return (m_num == 1 || m_den == 1); }
 
   static Zoom fromScale(double scale);
+
+  // Returns a zoom that represents the given scale as close as
+  // possible (not snapped to one of the predefined zoom levels).
+  static Zoom fromContinuousScale(double scale);
   static Zoom fromLinearScale(int i);
   static int linearValues();
 

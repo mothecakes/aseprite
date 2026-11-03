@@ -47,7 +47,8 @@ void ZoomEntry::setZoom(const render::Zoom& zoom)
   if (m_locked)
     return;
 
-  std::string newText = onGetTextFromValue(zoom.linearScale());
+  // Show the exact zoom (it can be between two zoom levels)
+  std::string newText = fmt::format("{:.1f}", zoom.scale() * 100.0);
   if (newText != text())
     setText(newText);
 }

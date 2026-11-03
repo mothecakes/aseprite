@@ -69,8 +69,10 @@ bool ZoomingState::onMouseMove(Editor* editor, MouseMessage* msg)
   if (m_moved || std::sqrt(pt.x * pt.x + pt.y * pt.y) > threshold) {
     m_moved = true;
 
-    int newScale = m_startZoom.linearScale() + pt.x / threshold;
-    render::Zoom newZoom = render::Zoom::fromLinearScale(newScale);
+    // Scrubby zoom: the scale is doubled/halved each 12*threshold
+    // pixels dragged horizontally, without snapping to zoom levels.
+    double newScale = m_startZoom.internalScale() * std::pow(2.0, pt.x / double(12 * threshold));
+    render::Zoom newZoom = render::Zoom::fromContinuousScale(newScale);
 
     editor->setZoomAndCenterInMouse(newZoom, m_startPos, Editor::ZoomBehavior::MOUSE);
   }
