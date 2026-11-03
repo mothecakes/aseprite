@@ -63,6 +63,7 @@
 #include "doc/mask_boundaries.h"
 #include "doc/slice.h"
 #include "fmt/format.h"
+#include "gfx/matrix.h"
 #include "os/color_space.h"
 #include "os/sampling.h"
 #include "os/surface.h"
@@ -666,12 +667,29 @@ void Editor::drawOneSpriteUnclippedRect(ui::Graphics* g,
   const auto& pref = Preferences::instance();
   const bool newEngine = isUsingNewRenderEngine();
   gfx::Rect rc2;
+  gfx::RectF exactDest; // Used only with fractional zoom levels
   if (newEngine) {
     rc2 = expose; // New engine, exposed rectangle (without zoom)
     dest.x = dx + m_padding.x + m_proj.applyX(rc2.x);
     dest.y = dy + m_padding.y + m_proj.applyY(rc2.y);
     dest.w = m_proj.applyX(rc2.w);
     dest.h = m_proj.applyY(rc2.h);
+
+    // With a fractional zoom (e.g. 137%) "dest" is rounded to screen
+    // pixels, so stretching rc2 into it would shift/resize the sprite
+    // pixels compared to the surrounding areas (artifacts while
+    // drawing). Here we calculate the exact area and make "dest"
+    // cover it, then the surface is drawn with a matrix below.
+    if (!m_proj.zoom().isSimpleZoomLevel()) {
+      exactDest = gfx::RectF(dx + m_padding.x + rc2.x * m_proj.scaleX(),
+                             dy + m_padding.y + rc2.y * m_proj.scaleY(),
+                             rc2.w * m_proj.scaleX(),
+                             rc2.h * m_proj.scaleY());
+      dest.x = int(std::floor(exactDest.x));
+      dest.y = int(std::floor(exactDest.y));
+      dest.w = int(std::ceil(exactDest.x2())) - dest.x;
+      dest.h = int(std::ceil(exactDest.y2())) - dest.y;
+    }
   }
   else {
     rc2 = rc; // Old engine, same rectangle with zoom
@@ -810,8 +828,28 @@ void Editor::drawOneSpriteUnclippedRect(ui::Graphics* g,
         --destClip.h;
 
       IntersectClip clip(g, destClip);
-      if (clip)
+      if (clip && exactDest.isEmpty()) {
         g->drawSurface(rendered.get(), gfx::Rect(0, 0, rc2.w, rc2.h), dest, sampling, &p);
+      }
+      else if (clip) {
+        // Map "dest" (rounded) to "exactDest" in device coordinates
+        const double devX = dest.x + g->getInternalDeltaX();
+        const double devY = dest.y + g->getInternalDeltaY();
+        const double kx = exactDest.w / dest.w;
+        const double ky = exactDest.h / dest.h;
+        g->save();
+        g->concat(gfx::Matrix::MakeAll(kx,
+                                       0,
+                                       exactDest.x + g->getInternalDeltaX() - kx * devX,
+                                       0,
+                                       ky,
+                                       exactDest.y + g->getInternalDeltaY() - ky * devY,
+                                       0,
+                                       0,
+                                       1));
+        g->drawSurface(rendered.get(), gfx::Rect(0, 0, rc2.w, rc2.h), dest, sampling, &p);
+        g->restore();
+      }
     }
     else {
       g->drawSurface(rendered.get(),
